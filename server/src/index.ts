@@ -2,8 +2,10 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import express from 'express';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import cors from 'cors';
+
+process.on('uncaughtException', (err) => console.error('FATAL:', err));
+process.on('unhandledRejection', (err) => console.error('REJECTION:', err));
 import { initDictionary } from './services/dictionary.js';
 import { setCurrentUser } from './db.js';
 import { fetchUrlText } from './services/urlFetcher.js';
@@ -67,6 +69,6 @@ if (fs.existsSync(clientDist)) {
 }
 
 // Start server first, then load dictionary in background
-const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}, client dist: ${clientDist}`));
-initDictionary().then(() => console.log('Dictionary ready'));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}, client dist: ${clientDist}`));
+initDictionary().then(() => console.log('Dictionary ready')).catch((e: any) => console.error('Dictionary load failed:', e.message));
 
