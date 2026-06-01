@@ -1,466 +1,267 @@
-import fs from 'node:fs';
-import path from 'node:path';
+/**
+ * Supabase-based database layer.
+ * Replaces file-based storage with PostgreSQL via Supabase.
+ */
+import { createClient } from '@supabase/supabase-js';
 
-const DATA_DIR = path.resolve('data');
-const DATA_FILE = path.join(DATA_DIR, 'store.json');
+const supabaseUrl = process.env.SUPABASE_URL || 'http://localhost:54321';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
 
-interface StoreData {
-  users: UserRecord[];
-  documents: DocumentRecord[];
-  segments: SegmentRecord[];
-  sentences: SentenceRecord[];
-  vocabulary: VocabularyRecord[];
-  occurrences: OccurrenceRecord[];
-  cards: CardRecord[];
-  reviewLogs: ReviewLogRecord[];
-  reviewStates: ReviewStateRecord[];
+if (!supabaseUrl || !supabaseKey) {
+  console.warn('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set. Using fallback file storage.');
 }
 
-const empty: StoreData = {
-  users: [],
-  documents: [],
-  segments: [],
-  sentences: [],
-  vocabulary: [],
-  occurrences: [],
-  cards: [],
-  reviewLogs: [],
-  reviewStates: [],
-};
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-let store: StoreData;
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let currentUserId = '00000000-0000-0000-0000-000000000000';
 
-function load(): void {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (fs.existsSync(DATA_FILE)) {
-      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      store = JSON.parse(raw);
-    } else {
-      store = { ...empty };
-      persist();
-    }
-  } catch {
-    store = { ...empty };
-  }
+export function setCurrentUser(id: string) { currentUserId = id; }
+
+export function uuid() {
+  return crypto.randomUUID();
 }
 
-function persist(): void {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('Failed to persist store:', e);
-  }
-}
-
-function save(): void {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(persist, 100);
-}
-
-load();
-
-let currentUserId = 'default';
-
-export function setCurrentUser(id: string) {
-  currentUserId = id;
-}
-
-export function getCurrentUser() {
-  return currentUserId;
-}
-
-export function uuid(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
+function now() { return new Date().toISOString(); }
 
 export const db = {
   // Users
-  upsertUser(username: string): UserRecord {
-    const existing = store.users.find(u => u.username === username);
+  async upsertUser(username: string): Promise<{ id: string; username: string }> {
+    const { data: existing } = await supabase.from('users').select('id,username').eq('username', username).single();
     if (existing) return existing;
-    const user: UserRecord = { id: uuid(), username, createdAt: now() };
-    store.users.push(user);
-    save();
-    return user;
+    const id = uuid();
+    await supabase.from('users').insert({ id, username });
+    return { id, username };
   },
 
   // Documents
-  createDocument(data: { title: string; fileType?: string; storagePath?: string; text: string }): DocumentRecord {
-    const doc: DocumentRecord = {
-      id: uuid(),
-      userId: currentUserId,
+  async createDocument(data: { title: string; fileType?: string; text: string }) {
+    const id = uuid();
+    const doc = {
+      id,
+      user_id: currentUserId,
       title: data.title,
-      fileType: data.fileType || 'text',
-      storagePath: data.storagePath || null,
+      file_type: data.fileType || 'text',
       text: data.text,
-      createdAt: now(),
-      updatedAt: now(),
     };
-    store.documents.push(doc);
-    save();
-    return doc;
+    await supabase.from('documents').insert(doc);
+    return { ...doc, createdAt: now(), updatedAt: now() };
   },
-  listDocuments(): DocumentRecord[] {
-    return store.documents.filter(d => d.userId === currentUserId).map((d) => ({
-      ...d,
-      segmentCount: store.segments.filter((s) => s.documentId === d.id).length,
-      sentenceCount: store.sentences.filter((s) => s.documentId === d.id).length,
-      candidateCount: store.occurrences.filter((o) => o.documentId === d.id).length,
-      cardCount: store.cards.filter((c) => c.documentId === d.id).length,
-    })) as DocumentRecord[];
+
+  async listDocuments() {
+    const { data } = await supabase.from('documents')
+      .select('*, text_segments(count), text_sentences(count)')
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: false });
+    return (data || []).map((d: any) => ({
+      id: d.id,
+      userId: d.user_id,
+      title: d.title,
+      fileType: d.file_type,
+      text: d.text,
+      segmentCount: d.text_segments?.[0]?.count || 0,
+      sentenceCount: d.text_sentences?.[0]?.count || 0,
+      candidateCount: 0,
+      cardCount: 0,
+      createdAt: d.created_at,
+      updatedAt: d.updated_at,
+    }));
   },
-  getDocument(id: string): DocumentRecord | undefined {
-    return store.documents.find((d) => d.id === id && d.userId === currentUserId);
+
+  async getDocument(id: string) {
+    const { data } = await supabase.from('documents').select('*').eq('id', id).eq('user_id', currentUserId).single();
+    if (!data) return undefined;
+    return {
+      id: data.id, userId: data.user_id, title: data.title,
+      fileType: data.file_type, text: data.text,
+      createdAt: data.created_at, updatedAt: data.updated_at,
+    };
   },
-  deleteDocument(id: string): boolean {
-    const before = store.documents.length;
-    store.documents = store.documents.filter((d) => d.id !== id);
-    store.segments = store.segments.filter((s) => s.documentId !== id);
-    store.sentences = store.sentences.filter((s) => s.documentId !== id);
-    store.occurrences = store.occurrences.filter((o) => o.documentId !== id);
-    store.cards = store.cards.filter((c) => c.documentId !== id);
-    save();
-    return store.documents.length < before;
+
+  async deleteDocument(id: string) {
+    await supabase.from('documents').delete().eq('id', id).eq('user_id', currentUserId);
   },
 
   // Segments
-  createSegments(
-    documentId: string,
-    items: { paragraphIndex: number; text: string; startOffset: number; endOffset: number }[],
-  ): SegmentRecord[] {
-    const records = items.map((item) => ({
-      id: uuid(),
-      documentId,
-      paragraphIndex: item.paragraphIndex,
-      text: item.text,
-      startOffset: item.startOffset,
-      endOffset: item.endOffset,
-      createdAt: now(),
+  async createSegments(docId: string, items: { paragraphIndex: number; text: string; startOffset: number; endOffset: number }[]) {
+    const rows = items.map((item, i) => ({
+      id: uuid(), document_id: docId, paragraph_index: item.paragraphIndex,
+      text: item.text, start_offset: item.startOffset, end_offset: item.endOffset,
     }));
-    store.segments.push(...records);
-    save();
-    return records;
+    await supabase.from('text_segments').insert(rows);
+    return rows;
   },
-  getSegments(documentId: string): SegmentRecord[] {
-    return store.segments.filter((s) => s.documentId === documentId);
+  async getSegments(docId: string) {
+    const { data } = await supabase.from('text_segments').select('*').eq('document_id', docId).order('paragraph_index');
+    return (data || []).map((d: any) => ({
+      id: d.id, documentId: d.document_id, paragraphIndex: d.paragraph_index,
+      text: d.text, startOffset: d.start_offset, endOffset: d.end_offset,
+    }));
   },
 
   // Sentences
-  createSentences(
-    documentId: string,
-    items: { segmentId: string; sentenceIndex: number; text: string; startOffset: number; endOffset: number }[],
-  ): SentenceRecord[] {
-    const records = items.map((item) => ({
-      id: uuid(),
-      documentId,
-      segmentId: item.segmentId,
-      sentenceIndex: item.sentenceIndex,
-      text: item.text,
-      startOffset: item.startOffset,
-      endOffset: item.endOffset,
-      createdAt: now(),
+  async createSentences(docId: string, items: { segmentId: string; sentenceIndex: number; text: string; startOffset: number; endOffset: number }[]) {
+    const rows = items.map(item => ({
+      id: uuid(), document_id: docId, segment_id: item.segmentId,
+      sentence_index: item.sentenceIndex, text: item.text,
+      start_offset: item.startOffset, end_offset: item.endOffset,
     }));
-    store.sentences.push(...records);
-    save();
-    return records;
+    await supabase.from('text_sentences').insert(rows);
+    return rows;
   },
-  getSentences(documentId: string): SentenceRecord[] {
-    return store.sentences.filter((s) => s.documentId === documentId);
+  async getSentences(docId: string) {
+    const { data } = await supabase.from('text_sentences').select('*').eq('document_id', docId).order('sentence_index');
+    return (data || []).map((d: any) => ({
+      id: d.id, documentId: d.document_id, segmentId: d.segment_id,
+      sentenceIndex: d.sentence_index, text: d.text,
+      startOffset: d.start_offset, endOffset: d.end_offset,
+    }));
   },
-  getSentence(id: string): SentenceRecord | undefined {
-    return store.sentences.find((s) => s.id === id);
+  async getSentence(id: string) {
+    const { data } = await supabase.from('text_sentences').select('*').eq('id', id).single();
+    if (!data) return undefined;
+    return { id: data.id, documentId: data.document_id, segmentId: data.segment_id,
+      sentenceIndex: data.sentence_index, text: data.text,
+      startOffset: data.start_offset, endOffset: data.end_offset };
   },
 
   // Vocabulary
-  createVocabulary(data: { surface: string; lemma: string; reading: string; partOfSpeech: string; meaning?: string }): VocabularyRecord {
-    const existing = store.vocabulary.find((v) => v.surface === data.surface && v.lemma === data.lemma);
-    if (existing) return existing;
-    const record: VocabularyRecord = {
-      id: uuid(),
-      surface: data.surface,
-      lemma: data.lemma,
-      reading: data.reading,
-      partOfSpeech: data.partOfSpeech,
-      meaning: data.meaning || null,
-      createdAt: now(),
-      updatedAt: now(),
-    };
-    store.vocabulary.push(record);
-    save();
-    return record;
-  },
-  getVocabularyBySurface(surface: string): VocabularyRecord | undefined {
-    return store.vocabulary.find((v) => v.surface === surface);
+  async createVocabulary(data: { surface: string; lemma: string; reading: string; partOfSpeech: string; meaning?: string }) {
+    const { data: existing } = await supabase.from('vocabulary_items')
+      .select('id').eq('surface', data.surface).eq('lemma', data.lemma).eq('user_id', currentUserId).single();
+    if (existing) return { id: existing.id, ...data };
+    const id = uuid();
+    await supabase.from('vocabulary_items').insert({ id, user_id: currentUserId, surface: data.surface, lemma: data.lemma, reading: data.reading, part_of_speech: data.partOfSpeech, meaning: data.meaning || null });
+    return { id, ...data };
   },
 
-  // Occurrences
-  createOccurrence(data: {
-    vocabularyId: string;
-    documentId: string;
-    segmentId: string;
-    sentenceId: string;
-    surfaceText: string;
-    startOffset: number;
-    endOffset: number;
-  }): OccurrenceRecord {
-    const record: OccurrenceRecord = {
-      id: uuid(),
-      ...data,
-      createdAt: now(),
-    };
-    store.occurrences.push(record);
-    save();
-    return record;
+  async createOccurrence(data: { vocabularyId: string; documentId: string; segmentId: string; sentenceId: string; surfaceText: string; startOffset: number; endOffset: number }) {
+    const id = uuid();
+    await supabase.from('vocabulary_occurrences').insert({
+      id, vocabulary_id: data.vocabularyId, document_id: data.documentId,
+      segment_id: data.segmentId, sentence_id: data.sentenceId,
+      surface_text: data.surfaceText, start_offset: data.startOffset, end_offset: data.endOffset,
+    });
+    return { id, ...data };
   },
-  getOccurrences(documentId: string): OccurrenceRecord[] {
-    return store.occurrences.filter((o) => o.documentId === documentId);
-  },
-  getOccurrencesByVocab(vocabularyId: string): OccurrenceRecord[] {
-    return store.occurrences.filter((o) => o.vocabularyId === vocabularyId);
+  async getOccurrences(docId: string) {
+    const { data } = await supabase.from('vocabulary_occurrences').select('*').eq('document_id', docId);
+    return (data || []).map((d: any) => ({
+      id: d.id, vocabularyId: d.vocabulary_id, documentId: d.document_id,
+      segmentId: d.segment_id, sentenceId: d.sentence_id,
+      surfaceText: d.surface_text, startOffset: d.start_offset, endOffset: d.end_offset,
+    }));
   },
 
   // Cards
-  createCard(data: {
-    vocabularyId: string;
-    documentId: string;
-    segmentId: string;
-    sentenceId: string;
-    occurrenceId: string;
-    frontText: string;
-    reading: string;
-    meaning: string;
-    partOfSpeech: string;
-    exampleSentences: string[];
-    dictData?: string | null;
-  }): CardRecord {
-    const record: CardRecord = {
-      id: uuid(),
-      vocabularyId: data.vocabularyId,
-      documentId: data.documentId,
-      segmentId: data.segmentId,
-      sentenceId: data.sentenceId,
-      occurrenceId: data.occurrenceId,
-      frontText: data.frontText,
-      reading: data.reading,
-      meaning: data.meaning,
-      partOfSpeech: data.partOfSpeech,
-      exampleSentences: data.exampleSentences,
-      dictData: data.dictData || null,
-      status: 'new',
-      createdAt: now(),
-      updatedAt: now(),
+  async createCard(data: { vocabularyId: string; documentId: string; sentenceId: string;
+    frontText: string; reading: string; meaning: string; partOfSpeech: string;
+    exampleSentences: string[]; dictData?: string | null }) {
+    const id = uuid();
+    const card = {
+      id, user_id: currentUserId, document_id: data.documentId,
+      vocabulary_id: data.vocabularyId, sentence_id: data.sentenceId,
+      front_text: data.frontText, reading: data.reading, meaning: data.meaning,
+      part_of_speech: data.partOfSpeech, example_sentences: data.exampleSentences,
+      dict_data: data.dictData ? JSON.parse(data.dictData) : null,
     };
-    store.cards.push(record);
-    save();
-    return record;
+    await supabase.from('cards').insert(card);
+    return {
+      id, vocabularyId: data.vocabularyId, documentId: data.documentId,
+      sentenceId: data.sentenceId, frontText: data.frontText, reading: data.reading,
+      meaning: data.meaning, partOfSpeech: data.partOfSpeech,
+      exampleSentences: data.exampleSentences, dictData: data.dictData,
+      status: 'new', createdAt: now(), updatedAt: now(),
+    };
   },
-  listCards(): CardRecord[] {
-    return store.cards;
+  async listCards() {
+    const { data } = await supabase.from('cards').select('*').eq('user_id', currentUserId).order('created_at', { ascending: false });
+    return (data || []).map((d: any) => ({
+      id: d.id, vocabularyId: d.vocabulary_id, documentId: d.document_id,
+      sentenceId: d.sentence_id, frontText: d.front_text, reading: d.reading,
+      meaning: d.meaning, partOfSpeech: d.part_of_speech,
+      exampleSentences: d.example_sentences || [], dictData: d.dict_data ? JSON.stringify(d.dict_data) : null,
+      status: d.status, createdAt: d.created_at, updatedAt: d.updated_at,
+    }));
   },
-  getCard(id: string): CardRecord | undefined {
-    return store.cards.find((c) => c.id === id);
+  async getCard(id: string) {
+    const { data } = await supabase.from('cards').select('*').eq('id', id).single();
+    if (!data) return undefined;
+    return {
+      id: data.id, vocabularyId: data.vocabulary_id, documentId: data.document_id,
+      sentenceId: data.sentence_id, frontText: data.front_text, reading: data.reading,
+      meaning: data.meaning, partOfSpeech: data.part_of_speech,
+      exampleSentences: data.example_sentences || [], dictData: data.dict_data ? JSON.stringify(data.dict_data) : null,
+      status: data.status, createdAt: data.created_at, updatedAt: data.updated_at,
+    };
   },
-  updateCard(id: string, data: Partial<Pick<CardRecord, 'frontText' | 'reading' | 'meaning' | 'exampleSentences' | 'status'>>): CardRecord | undefined {
-    const card = store.cards.find((c) => c.id === id);
-    if (!card) return undefined;
-    Object.assign(card, data, { updatedAt: now() });
-    save();
-    return card;
+  async updateCard(id: string, data: Partial<{ status: string }>) {
+    const update: any = {};
+    if (data.status) update.status = data.status;
+    await supabase.from('cards').update(update).eq('id', id);
   },
-  deleteCard(id: string): boolean {
-    const before = store.cards.length;
-    store.cards = store.cards.filter((c) => c.id !== id);
-    store.reviewLogs = store.reviewLogs.filter((r) => r.cardId !== id);
-    save();
-    return store.cards.length < before;
+  async deleteCard(id: string) {
+    await supabase.from('cards').delete().eq('id', id);
   },
 
-  // Review
-  createReviewLog(cardId: string, result: string): ReviewLogRecord {
-    const record: ReviewLogRecord = {
-      id: uuid(),
-      cardId,
-      result,
-      reviewedAt: now(),
-    };
-    store.reviewLogs.push(record);
-    save();
-    return record;
+  // Reviews
+  async createReviewLog(cardId: string, result: string) {
+    const id = uuid();
+    await supabase.from('review_logs').insert({ id, user_id: currentUserId, card_id: cardId, result });
+    return { id, cardId, result, reviewedAt: now() };
   },
-  getReviewLogs(cardId: string): ReviewLogRecord[] {
-    return store.reviewLogs.filter((r) => r.cardId === cardId);
-  },
-  getTodayReviews(): ReviewLogRecord[] {
+  async getTodayReviews() {
     const today = new Date().toISOString().slice(0, 10);
-    return store.reviewLogs.filter((r) => r.reviewedAt.startsWith(today));
+    const { data } = await supabase.from('review_logs').select('*').eq('user_id', currentUserId).gte('reviewed_at', today);
+    return (data || []).map((d: any) => ({ id: d.id, cardId: d.card_id, result: d.result, reviewedAt: d.reviewed_at }));
   },
-  getAllReviewLogs(): ReviewLogRecord[] {
-    return store.reviewLogs;
+  async getAllReviewLogs() {
+    const { data } = await supabase.from('review_logs').select('*').eq('user_id', currentUserId);
+    return (data || []).map((d: any) => ({ id: d.id, cardId: d.card_id, result: d.result, reviewedAt: d.reviewed_at }));
   },
 
-  // Spaced Repetition
-  getReviewState(cardId: string): ReviewStateRecord | undefined {
-    if (!store.reviewStates) store.reviewStates = [];
-    return store.reviewStates.find((r) => r.cardId === cardId);
+  // SRS
+  async getReviewState(cardId: string) {
+    const { data } = await supabase.from('review_states').select('*').eq('card_id', cardId).eq('user_id', currentUserId).single();
+    return data ? { id: data.id, cardId: data.card_id, stage: data.stage, intervalDays: data.interval_days, dueAt: data.due_at } : undefined;
   },
-  upsertReviewState(cardId: string, result: string): ReviewStateRecord {
-    if (!store.reviewStates) store.reviewStates = [];
-    const intervals = [1, 2, 4, 7, 15, 30]; // Ebbinghaus intervals in days
-    let existing = store.reviewStates.find((r) => r.cardId === cardId);
-    const now = new Date();
+  async upsertReviewState(cardId: string, result: string) {
+    const intervals = [1, 2, 4, 7, 15, 30];
+    const { data: existing } = await supabase.from('review_states').select('*').eq('card_id', cardId).eq('user_id', currentUserId).single();
+    const n = new Date();
     if (existing) {
       const stage = result === 'again' ? 0 : Math.min((existing.stage || 0) + 1, intervals.length - 1);
       const days = intervals[stage];
-      const due = new Date(now);
-      due.setDate(due.getDate() + days);
-      existing.stage = stage;
-      existing.intervalDays = days;
-      existing.dueAt = due.toISOString();
-      existing.lastReviewedAt = now.toISOString();
-      existing.updatedAt = now.toISOString();
+      const due = new Date(n); due.setDate(due.getDate() + days);
+      await supabase.from('review_states').update({ stage, interval_days: days, due_at: due.toISOString(), last_reviewed_at: n.toISOString() }).eq('id', existing.id);
     } else {
       const days = result === 'again' ? 1 : intervals[0];
-      const due = new Date(now);
-      due.setDate(due.getDate() + days);
-      existing = {
-        id: uuid(),
-        cardId,
-        stage: result === 'again' ? 0 : 1,
-        intervalDays: days,
-        dueAt: due.toISOString(),
-        lastReviewedAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      };
-      store.reviewStates.push(existing);
+      const due = new Date(n); due.setDate(due.getDate() + days);
+      await supabase.from('review_states').insert({ id: uuid(), user_id: currentUserId, card_id: cardId, stage: result === 'again' ? 0 : 1, interval_days: days, due_at: due.toISOString(), last_reviewed_at: n.toISOString() });
     }
-    save();
-    return existing;
   },
-  getDueCards(): CardRecord[] {
-    if (!store.reviewStates) store.reviewStates = [];
-    const now = new Date().toISOString();
-    const dueCardIds = store.reviewStates
-      .filter((r) => r.dueAt && r.dueAt <= now)
-      .map((r) => r.cardId);
-    // Also include new cards (never reviewed)
-    const reviewedIds = store.reviewStates.map((r) => r.cardId);
-    const newCardIds = store.cards.filter((c) => !reviewedIds.includes(c.id)).map((c) => c.id);
-    return store.cards.filter((c) => dueCardIds.includes(c.id) || newCardIds.includes(c.id));
+  async getDueCards() {
+    const now2 = new Date().toISOString();
+    // Get due review states
+    const { data: dueStates } = await supabase.from('review_states').select('card_id').eq('user_id', currentUserId).lte('due_at', now2);
+    const dueIds = (dueStates || []).map(d => d.card_id);
+    // Get new cards (never reviewed)
+    const { data: allCardIds } = await supabase.from('cards').select('id').eq('user_id', currentUserId);
+    const { data: reviewedCardIds } = await supabase.from('review_states').select('card_id').eq('user_id', currentUserId);
+    const reviewedSet = new Set((reviewedCardIds || []).map(d => d.card_id));
+    const newIds = (allCardIds || []).filter(c => !reviewedSet.has(c.id)).map(c => c.id);
+    const allDue = [...new Set([...dueIds, ...newIds])];
+    if (allDue.length === 0) return [];
+    const { data: cards } = await supabase.from('cards').select('*').in('id', allDue);
+    return (cards || []).map((d: any) => ({
+      id: d.id, vocabularyId: d.vocabulary_id, documentId: d.document_id,
+      sentenceId: d.sentence_id, frontText: d.front_text, reading: d.reading,
+      meaning: d.meaning, partOfSpeech: d.part_of_speech,
+      exampleSentences: d.example_sentences || [], dictData: d.dict_data ? JSON.stringify(d.dict_data) : null,
+      status: d.status, createdAt: d.created_at, updatedAt: d.updated_at,
+    }));
   },
-  getDueCount(): number {
-    return this.getDueCards().length;
+  async getDueCount() {
+    const cards = await this.getDueCards();
+    return cards.length;
   },
 };
-
-export interface DocumentRecord {
-  id: string;
-  userId: string;
-  title: string;
-  fileType: string;
-  storagePath: string | null;
-  text: string;
-  segmentCount?: number;
-  sentenceCount?: number;
-  candidateCount?: number;
-  cardCount?: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface UserRecord {
-  id: string;
-  username: string;
-  createdAt: string;
-}
-
-// ... (other interfaces remain unchanged)
-
-export interface SegmentRecord {
-  id: string;
-  documentId: string;
-  paragraphIndex: number;
-  text: string;
-  startOffset: number;
-  endOffset: number;
-  createdAt: string;
-}
-
-export interface SentenceRecord {
-  id: string;
-  documentId: string;
-  segmentId: string;
-  sentenceIndex: number;
-  text: string;
-  startOffset: number;
-  endOffset: number;
-  createdAt: string;
-}
-
-export interface VocabularyRecord {
-  id: string;
-  surface: string;
-  lemma: string;
-  reading: string;
-  partOfSpeech: string;
-  meaning: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface OccurrenceRecord {
-  id: string;
-  vocabularyId: string;
-  documentId: string;
-  segmentId: string;
-  sentenceId: string;
-  surfaceText: string;
-  startOffset: number;
-  endOffset: number;
-  createdAt: string;
-}
-
-export interface CardRecord {
-  id: string;
-  vocabularyId: string;
-  documentId: string;
-  segmentId: string;
-  sentenceId: string;
-  occurrenceId: string;
-  frontText: string;
-  reading: string;
-  meaning: string;
-  partOfSpeech: string;
-  exampleSentences: string[];
-  dictData: string | null;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ReviewLogRecord {
-  id: string;
-  cardId: string;
-  result: string;
-  reviewedAt: string;
-}
-
-export interface ReviewStateRecord {
-  id: string;
-  cardId: string;
-  stage: number;
-  intervalDays: number;
-  dueAt: string;
-  lastReviewedAt: string;
-  updatedAt: string;
-}

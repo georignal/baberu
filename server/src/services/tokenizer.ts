@@ -58,7 +58,7 @@ function init(): Promise<void> {
   return initPromise;
 }
 
-export interface Token {
+export interface Token { endOffset: number;
   surface: string;
   lemma: string;
   reading: string;
@@ -125,7 +125,8 @@ export async function tokenize(text: string): Promise<Token[]> {
       partOfSpeech: t.pos,
       meaning,
       priority: PRIORITY[t.pos] ?? 1,
-      startOffset: t.word_position - 1, // kuromoji uses 1-indexed; convert to 0-indexed
+      startOffset: t.word_position - 1,
+      endOffset: t.word_position - 1 + surface.length,
     });
   }
 

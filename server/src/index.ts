@@ -1,4 +1,7 @@
+import 'dotenv/config';
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import { initDictionary } from './services/dictionary.js';
 import { setCurrentUser } from './db.js';
@@ -9,13 +12,13 @@ import vocabularyRouter from './routes/vocabulary.js';
 import cardsRouter from './routes/cards.js';
 import reviewRouter from './routes/review.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Auth middleware: extract user from token
 app.use((req, _res, next) => {
   const auth = req.headers.authorization;
   if (auth?.startsWith('Bearer ')) {
@@ -51,8 +54,15 @@ app.use('/api/vocabulary', vocabularyRouter);
 app.use('/api/cards', cardsRouter);
 app.use('/api/review', reviewRouter);
 
+// Production: serve built client files
+const clientDist = path.resolve(__dirname, '../../client/dist');
+app.use(express.static(clientDist));
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(clientDist, 'index.html'));
+});
+
 async function start() {
   await initDictionary();
-  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 start();
