@@ -14,9 +14,11 @@ const clientDist = path.resolve(__dirname, '../../client/dist');
 const hasClient = fs.existsSync(clientDist);
 if (hasClient) {
   app.use(express.static(clientDist));
-  app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
 }
+
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', client: hasClient }));
+
+setTimeout(async () => {
   try {
     const { setCurrentUser } = await import('./db.js');
     const authRouter = (await import('./routes/auth.js')).default;
@@ -34,7 +36,6 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', client: hasClient
       next();
     });
 
-    app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
     app.use('/api/auth', authRouter);
     app.use('/api/documents', docsRouter);
     app.use('/api/cards', cardsRouter);
@@ -51,11 +52,13 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', client: hasClient
       } catch (e: any) { res.status(500).json({ error: e.message }); }
     });
     await initDictionary().catch(() => {});
-    console.log('All services loaded');
-  } catch (e) { console.error('Service load failed:', e); }
+    console.log('Services loaded');
+  } catch (e) { console.error('Load error:', e); }
 }, 50);
 
-// SPA fallback (after static files)
-app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+app.get('*', (_req, res) => {
+  if (hasClient) res.sendFile(path.join(clientDist, 'index.html'));
+  else res.json({ message: 'baberu API server' });
+});
 
-app.listen(PORT, () => console.log(`Server on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server on ${PORT}, client: ${hasClient}`));
