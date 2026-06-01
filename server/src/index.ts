@@ -61,8 +61,7 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(clientDist, 'index.html'));
 });
 
-async function start() {
-  await initDictionary();
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-}
-start();
+// Start server first, then load dictionary in background
+const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+initDictionary().then(() => console.log('Dictionary ready'));
+
