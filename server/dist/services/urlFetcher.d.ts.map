@@ -1,0 +1,1 @@
+{"version":3,"file":"urlFetcher.d.ts","sourceRoot":"","sources":["../../src/services/urlFetcher.ts"],"names":[],"mappings":"AAEA,MAAM,WAAW,WAAW;IAC1B,KAAK,EAAE,MAAM,CAAC;IACd,IAAI,EAAE,MAAM,CAAC;IACb,MAAM,EAAE,MAAM,CAAC;CAChB;AAED,wBAAsB,YAAY,CAAC,GAAG,EAAE,MAAM,GAAG,OAAO,CAAC,WAAW,CAAC,CA8CpE"}
