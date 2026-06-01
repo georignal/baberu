@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: theme('colors.bg');
+    color: #171717;
+    font-size: 14px;
+    line-height: 1.5;
+    font-family: theme('fontFamily.sans');
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  textarea,
+  input,
+  select {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .topbar {
+    @apply h-14 flex items-center justify-between px-4 border-b border-border bg-white/80 backdrop-blur-md sticky top-0 z-20;
+  }
+
+  .panel {
+    @apply bg-panel border border-border rounded-2xl shadow-panel flex flex-col overflow-hidden;
+  }
+
+  .panel-header {
+    @apply min-h-[46px] flex items-center justify-between px-3.5 border-b border-border bg-panel;
+  }
+
+  .panel-body {
+    @apply p-3.5 min-h-0 overflow-auto;
+  }
+
+  .btn-ghost {
+    @apply h-[34px] px-3 rounded-sm border border-border bg-panel text-[#171717] font-medium text-[13px] hover:border-border-strong hover:bg-[#fdfdfc] transition-colors inline-flex items-center justify-center;
+  }
+
+  .btn-primary {
+    @apply h-[34px] px-3 rounded-sm border border-[#171717] bg-[#171717] text-white font-medium text-[13px] disabled:opacity-45 disabled:cursor-not-allowed transition-opacity inline-flex items-center justify-center;
+  }
+
+  .btn-soft {
+    @apply h-[34px] px-3 rounded-sm border border-[#cfe7e2] bg-accent-soft text-[#115e59] font-medium text-[13px] hover:bg-accent-soft/80 transition-colors inline-flex items-center justify-center;
+  }
+
+  .btn-icon {
+    @apply h-[30px] min-w-[30px] rounded-[9px] border border-border bg-white text-muted px-2 text-xs hover:text-[#171717] hover:border-border-strong transition-colors;
+  }
+}

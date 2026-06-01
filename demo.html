@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kotoba Deck Demo</title>
+  <style>
+    :root {
+      --bg: #f7f7f6;
+      --panel: #ffffff;
+      --panel-2: #fbfbfa;
+      --text: #171717;
+      --muted: #6f6f6f;
+      --subtle: #9a9a9a;
+      --border: #e7e5e1;
+      --border-strong: #d8d5ce;
+      --accent: #0f766e;
+      --accent-soft: #e6f4f1;
+      --danger: #b42318;
+      --warning: #b7791f;
+      --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 12px 32px rgba(15, 23, 42, .06);
+      --radius: 14px;
+      --radius-sm: 10px;
+      --topbar: 56px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Noto Sans JP", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    button, textarea, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: var(--topbar) 1fr;
+    }
+
+    .topbar {
+      height: var(--topbar);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, .82);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+    .mark {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 32%, #fff 0 20%, #e9e5dc 21% 54%, #a7b0b0 55% 100%);
+      border: 1px solid #c9cec9;
+      box-shadow: inset 0 0 0 4px rgba(255,255,255,.34);
+    }
+    .brand-title { font-weight: 620; letter-spacing: -.02em; }
+    .brand-sub { color: var(--muted); font-size: 12px; margin-left: 8px; }
+
+    .nav { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); }
+    .nav button {
+      border: 0; background: transparent; color: var(--muted); padding: 6px 12px;
+      border-radius: 999px; font-size: 13px;
+    }
+    .nav button.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+
+    .top-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 180px; }
+    .ghost, .primary, .soft {
+      height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--panel); color: var(--text); font-weight: 520; font-size: 13px;
+    }
+    .ghost:hover, .soft:hover { border-color: var(--border-strong); background: #fdfdfc; }
+    .primary { background: #171717; border-color: #171717; color: #fff; }
+    .primary:disabled { opacity: .45; cursor: not-allowed; }
+    .soft { background: var(--accent-soft); color: #115e59; border-color: #cfe7e2; }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      min-height: calc(100vh - var(--topbar));
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border);
+      padding: 18px 12px;
+      background: #fafaf9;
+    }
+    .side-section { margin-bottom: 22px; }
+    .side-label { color: var(--subtle); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; padding: 0 10px 8px; }
+    .side-item {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; height: 34px; padding: 0 10px; border-radius: 10px;
+      color: var(--muted); border: 0; background: transparent; text-align: left;
+    }
+    .side-item.active { background: #fff; color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+    .count { color: var(--subtle); font-size: 12px; }
+
+    .main {
+      padding: 18px;
+      overflow: hidden;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(380px, 1fr) 360px;
+      gap: 14px;
+      height: calc(100vh - var(--topbar) - 36px);
+    }
+
+    .stack { display: grid; gap: 14px; min-height: 0; }
+    .two-rows { grid-template-rows: 268px minmax(0, 1fr); }
+    .right-rows { grid-template-rows: 1fr 1fr; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      min-height: 46px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--panel);
+    }
+    .panel-title { font-weight: 620; letter-spacing: -.01em; }
+    .panel-meta { color: var(--muted); font-size: 12px; }
+    .panel-body { padding: 14px; min-height: 0; overflow: auto; }
+
+    .input-grid { display: grid; grid-template-columns: 1fr 180px; gap: 12px; height: 100%; }
+    textarea {
+      resize: none; width: 100%; height: 100%; min-height: 170px;
+      border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+      background: #fff; outline: none; color: var(--text);
+    }
+    textarea:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px rgba(15,118,110,.08); }
+
+    .upload-box {
+      border: 1px dashed var(--border-strong); border-radius: 12px;
+      background: #fbfbfa; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .upload-box input { width: 100%; font-size: 12px; color: var(--muted); }
+    .hint { color: var(--muted); font-size: 12px; }
+
+    .reader {
+      height: 100%; overflow: auto; padding: 18px 28px 42px;
+      background: linear-gradient(90deg, transparent 0, transparent 18px, rgba(231,229,225,.45) 18px, rgba(231,229,225,.45) 19px, transparent 19px);
+    }
+    .doc-title { font-size: 20px; font-weight: 680; letter-spacing: -.03em; margin: 0 0 18px; }
+    .sentence {
+      padding: 4px 7px; margin: 6px -7px; border-radius: 8px; color: #242424;
+      transition: background .18s ease, box-shadow .18s ease;
+    }
+    .sentence.focused { background: #fff8db; box-shadow: inset 0 0 0 1px #eadb9c; }
+    .hit { background: #e6f4f1; border-radius: 5px; padding: 1px 2px; }
+
+    .candidate-list, .card-list { display: grid; gap: 8px; }
+    .row {
+      border: 1px solid var(--border); border-radius: 12px; padding: 10px;
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center;
+      background: var(--panel-2);
+    }
+    .word { font-weight: 680; font-size: 15px; letter-spacing: -.01em; }
+    .reading { color: var(--muted); font-size: 12px; margin-left: 6px; font-weight: 480; }
+    .meaning { color: #3f3f3f; font-size: 13px; margin-top: 4px; }
+    .source { color: var(--subtle); font-size: 12px; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+    .mini-actions { display: flex; gap: 6px; }
+    .icon-btn {
+      height: 30px; min-width: 30px; border-radius: 9px; border: 1px solid var(--border);
+      background: #fff; color: var(--muted); padding: 0 9px; font-size: 12px;
+    }
+    .icon-btn:hover { color: var(--text); border-color: var(--border-strong); }
+
+    .review-wrap {
+      max-width: 560px; margin: 40px auto; display: grid; gap: 14px;
+    }
+    .review-card {
+      min-height: 360px; background: #fff; border: 1px solid var(--border); border-radius: 22px;
+      box-shadow: var(--shadow); padding: 30px; display: flex; flex-direction: column; justify-content: center; text-align: center;
+    }
+    .review-word { font-size: 46px; font-weight: 720; letter-spacing: -.05em; line-height: 1.1; }
+    .review-reading { margin-top: 8px; color: var(--muted); font-size: 18px; }
+    .divider { width: 44px; height: 1px; background: var(--border-strong); margin: 24px auto; }
+    .review-meaning { font-size: 18px; color: #2a2a2a; }
+    .review-example { margin-top: 18px; color: #3f3f3f; text-align: left; background: #fafaf9; border: 1px solid var(--border); border-radius: 14px; padding: 14px; }
+    .review-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+    .source-view {
+      max-width: 720px; margin: 30px auto; background: #fff; border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden;
+    }
+    .context-line { padding: 14px 18px; border-bottom: 1px solid var(--border); color: #3f3f3f; }
+    .context-line.target { background: #fff8db; color: #171717; font-weight: 560; }
+
+    .empty {
+      height: 100%; min-height: 120px; display: grid; place-items: center; color: var(--subtle); font-size: 13px; text-align: center;
+    }
+
+    .mobile-only { display: none; }
+
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .topbar { padding: 0 12px; }
+      .brand-sub, .top-actions .ghost { display: none; }
+      .nav { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; justify-content: space-around; box-shadow: 0 10px 40px rgba(0,0,0,.12); }
+      .nav button { flex: 1; }
+      .main { padding: 12px 12px 74px; }
+      .workspace { height: auto; display: grid; grid-template-columns: 1fr; }
+      .two-rows, .right-rows { grid-template-rows: auto; }
+      .input-grid { grid-template-columns: 1fr; }
+      .reader { max-height: 420px; padding: 16px; }
+      .desktop-only { display: none !important; }
+      .mobile-only { display: initial; }
+      .panel { box-shadow: none; }
+      .review-wrap { margin: 12px auto; }
+      .review-card { min-height: 420px; padding: 24px; }
+      .review-word { font-size: 42px; }
+      .review-actions { grid-template-columns: 1fr 1fr; }
+      .review-actions .soft { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true"></div>
+        <div><span class="brand-title">Kotoba Deck</span><span class="brand-sub">document based vocabulary</span></div>
+      </div>
+      <nav class="nav" aria-label="Primary">
+        <button class="active" data-view="studio">Studio</button>
+        <button data-view="cards">Cards</button>
+        <button data-view="review">Review</button>
+        <button data-view="source">Source</button>
+      </nav>
+      <div class="top-actions">
+        <button class="ghost" id="resetBtn">Reset</button>
+        <button class="primary" id="extractBtn">Extract</button>
+      </div>
+    </header>
+
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="side-section">
+          <div class="side-label">Workspace</div>
+          <button class="side-item active" data-view="studio"><span>Studio</span><span class="count" id="candidateCountSide">0</span></button>
+          <button class="side-item" data-view="cards"><span>Cards</span><span class="count" id="cardCountSide">0</span></button>
+          <button class="side-item" data-view="review"><span>Review</span><span class="count" id="reviewCountSide">0</span></button>
+        </div>
+        <div class="side-section">
+          <div class="side-label">Document</div>
+          <button class="side-item active"><span>sample.txt</span><span class="count">JP</span></button>
+          <button class="side-item"><span>TXT</span><span class="count">ready</span></button>
+          <button class="side-item"><span>PWA</span><span class="count">mobile</span></button>
+        </div>
+      </aside>
+
+      <main class="main" id="main"></main>
+    </div>
+  </div>
+
+  <script>
+    const sampleText = `日本語を学ぶとき、単語を文脈の中で覚えることはとても重要です。\n\n例えば、新聞の記事や小説の一節から新しい語彙を見つけ、その語彙が実際にどのように使われているかを確認できます。\n\n暗記カードには読み方、意味、例文、そして元の文章へのリンクを保存します。\n\n復習するときは、単語だけを見るのではなく、例文と前後の文も一緒に確認すると記憶に残りやすくなります。`;
+
+    const dictionary = {
+      '日本語': ['にほんご', '日语'],
+      '学ぶ': ['まなぶ', '学习'],
+      '単語': ['たんご', '单词'],
+      '文脈': ['ぶんみゃく', '语境；上下文'],
+      '覚える': ['おぼえる', '记住；掌握'],
+      '重要': ['じゅうよう', '重要'],
+      '新聞': ['しんぶん', '报纸'],
+      '記事': ['きじ', '报道；文章'],
+      '小説': ['しょうせつ', '小说'],
+      '一節': ['いっせつ', '一节；一段'],
+      '語彙': ['ごい', '词汇'],
+      '実際': ['じっさい', '实际'],
+      '確認': ['かくにん', '确认'],
+      '暗記': ['あんき', '背诵；记忆'],
+      'カード': ['カード', '卡片'],
+      '読み方': ['よみかた', '读法'],
+      '意味': ['いみ', '意思；含义'],
+      '例文': ['れいぶん', '例句'],
+      '文章': ['ぶんしょう', '文章'],
+      'リンク': ['リンク', '链接'],
+      '保存': ['ほぞん', '保存'],
+      '復習': ['ふくしゅう', '复习'],
+      '記憶': ['きおく', '记忆'],
+      '残る': ['のこる', '留下；保留']
+    };
+
+    const state = {
+      view: 'studio',
+      text: localStorage.getItem('kd_text') || sampleText,
+      sentences: [],
+      candidates: JSON.parse(localStorage.getItem('kd_candidates') || '[]'),
+      cards: JSON.parse(localStorage.getItem('kd_cards') || '[]'),
+      focusedSentenceId: localStorage.getItem('kd_focus') || null,
+      reviewIndex: Number(localStorage.getItem('kd_review_index') || 0),
+      answerVisible: false
+    };
+
+    const main = document.getElementById('main');
+
+    function save() {
+      localStorage.setItem('kd_text', state.text);
+      localStorage.setItem('kd_candidates', JSON.stringify(state.candidates));
+      localStorage.setItem('kd_cards', JSON.stringify(state.cards));
+      localStorage.setItem('kd_focus', state.focusedSentenceId || '');
+      localStorage.setItem('kd_review_index', String(state.reviewIndex));
+    }
+
+    function splitSentences(text) {
+      const raw = text.replace(/\r/g, '').split(/(?<=[。！？!?])\s*|\n+/).map(s => s.trim()).filter(Boolean);
+      return raw.map((text, index) => ({ id: `s-${index + 1}`, index, text }));
+    }
+
+    function extractCandidates() {
+      state.sentences = splitSentences(state.text);
+      const result = [];
+      for (const [word, info] of Object.entries(dictionary)) {
+        const found = state.sentences.find(s => s.text.includes(word));
+        if (found && !state.cards.some(c => c.word === word)) {
+          result.push({
+            id: `v-${word}`,
+            word,
+            reading: info[0],
+            meaning: info[1],
+            sentenceId: found.id,
+            example: found.text,
+            frequency: state.sentences.filter(s => s.text.includes(word)).length
+          });
+        }
+      }
+      state.candidates = result;
+      state.focusedSentenceId = result[0]?.sentenceId || state.sentences[0]?.id || null;
+      save();
+      render();
+    }
+
+    function makeCard(id) {
+      const item = state.candidates.find(c => c.id === id);
+      if (!item) return;
+      state.cards.unshift({
+        id: `card-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        ...item,
+        status: 'new',
+        createdAt: new Date().toISOString()
+      });
+      state.candidates = state.candidates.filter(c => c.id !== id);
+      state.focusedSentenceId = item.sentenceId;
+      state.view = 'cards';
+      save();
+      render();
+    }
+
+    function removeCard(id) {
+      state.cards = state.cards.filter(c => c.id !== id);
+      state.reviewIndex = Math.min(state.reviewIndex, Math.max(0, state.cards.length - 1));
+      save(); render();
+    }
+
+    function focusSource(sentenceId, view = 'source') {
+      state.focusedSentenceId = sentenceId;
+      state.view = view;
+      save(); render();
+    }
+
+    function setView(view) {
+      state.view = view;
+      state.answerVisible = false;
+      render();
+    }
+
+    function updateCounts() {
+      document.getElementById('candidateCountSide').textContent = state.candidates.length;
+      document.getElementById('cardCountSide').textContent = state.cards.length;
+      document.getElementById('reviewCountSide').textContent = state.cards.length;
+      document.querySelectorAll('[data-view]').forEach(btn => btn.classList.toggle('active', btn.dataset.view === state.view));
+    }
+
+    function highlight(text, word) {
+      if (!word) return escapeHtml(text);
+      return escapeHtml(text).replaceAll(escapeHtml(word), `<span class="hit">${escapeHtml(word)}</span>`);
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+    }
+
+    function renderReader(word = '') {
+      state.sentences = splitSentences(state.text);
+      return `<div class="reader">
+        <h1 class="doc-title">sample.txt</h1>
+        ${state.sentences.map(s => `<p class="sentence ${s.id === state.focusedSentenceId ? 'focused' : ''}" data-sentence="${s.id}">${highlight(s.text, word)}</p>`).join('')}
+      </div>`;
+    }
+
+    function renderStudio() {
+      const focusWord = state.candidates.find(c => c.sentenceId === state.focusedSentenceId)?.word || '';
+      main.innerHTML = `<section class="workspace">
+        <div class="stack two-rows">
+          <section class="panel">
+            <div class="panel-header"><div class="panel-title">Document input</div><div class="panel-meta">TXT / paste demo</div></div>
+            <div class="panel-body">
+              <div class="input-grid">
+                <textarea id="docInput" spellcheck="false">${escapeHtml(state.text)}</textarea>
+                <div class="upload-box">
+                  <div>
+                    <div class="panel-title" style="font-size:13px;margin-bottom:8px;">Upload text</div>
+                    <input type="file" id="fileInput" accept=".txt,.md,text/plain" />
+                  </div>
+                  <div class="hint">Demo 版本在浏览器内读取 TXT。PDF / DOCX / OCR 应放到后端 Worker。</div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><div class="panel-title">Source reader</div><div class="panel-meta">sentence linked</div></div>
+            ${renderReader(focusWord)}
+          </section>
+        </div>
+        <div class="stack right-rows">
+          <section class="panel">
+            <div class="panel-header"><div class="panel-title">Vocabulary candidates</div><div class="panel-meta">${state.candidates.length} items</div></div>
+            <div class="panel-body">${renderCandidates()}</div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><div class="panel-title">Generated cards</div><div class="panel-meta">${state.cards.length} cards</div></div>
+            <div class="panel-body">${renderCards(true)}</div>
+          </section>
+        </div>
+      </section>`;
+      bindStudio();
+    }
+
+    function renderCandidates() {
+      if (!state.candidates.length) return `<div class="empty">Paste text, then extract vocabulary.</div>`;
+      return `<div class="candidate-list">${state.candidates.map(c => `<div class="row">
+        <div>
+          <div><span class="word">${c.word}</span><span class="reading">${c.reading}</span></div>
+          <div class="meaning">${c.meaning}</div>
+          <div class="source">${c.example}</div>
+        </div>
+        <div class="mini-actions">
+          <button class="icon-btn" data-focus="${c.sentenceId}">Source</button>
+          <button class="icon-btn" data-make="${c.id}">Add</button>
+        </div>
+      </div>`).join('')}</div>`;
+    }
+
+    function renderCards(compact = false) {
+      if (!state.cards.length) return `<div class="empty">No cards yet.</div>`;
+      return `<div class="card-list">${state.cards.map(c => `<div class="row">
+        <div>
+          <div><span class="word">${c.word}</span><span class="reading">${c.reading}</span></div>
+          <div class="meaning">${c.meaning}</div>
+          <div class="source">${c.example}</div>
+        </div>
+        <div class="mini-actions">
+          <button class="icon-btn" data-source="${c.sentenceId}">Source</button>
+          ${compact ? '' : `<button class="icon-btn" data-delete="${c.id}">Delete</button>`}
+        </div>
+      </div>`).join('')}</div>`;
+    }
+
+    function renderCardsPage() {
+      main.innerHTML = `<section class="panel" style="height:calc(100vh - var(--topbar) - 36px);max-width:980px;margin:0 auto;">
+        <div class="panel-header"><div class="panel-title">Cards</div><div class="panel-meta">editable library mock</div></div>
+        <div class="panel-body">${renderCards(false)}</div>
+      </section>`;
+      bindCommon();
+    }
+
+    function renderReview() {
+      const card = state.cards[state.reviewIndex % Math.max(1, state.cards.length)];
+      if (!card) {
+        main.innerHTML = `<div class="review-wrap"><div class="empty" style="height:360px;">Create cards first.</div></div>`;
+        return;
+      }
+      main.innerHTML = `<div class="review-wrap">
+        <div class="review-card">
+          <div class="review-word">${card.word}</div>
+          <div class="review-reading">${card.reading}</div>
+          ${state.answerVisible ? `<div class="divider"></div><div class="review-meaning">${card.meaning}</div><div class="review-example">${highlight(card.example, card.word)}</div>` : `<div class="divider"></div><div class="hint">Tap Show answer to reveal meaning and source sentence.</div>`}
+        </div>
+        <div class="review-actions">
+          <button class="ghost" id="unknownBtn">Again</button>
+          <button class="primary" id="showAnswerBtn">${state.answerVisible ? 'Next' : 'Show answer'}</button>
+          <button class="soft" data-source="${card.sentenceId}">View source</button>
+        </div>
+      </div>`;
+      bindReview();
+    }
+
+    function renderSource() {
+      state.sentences = splitSentences(state.text);
+      const index = Math.max(0, state.sentences.findIndex(s => s.id === state.focusedSentenceId));
+      const target = state.sentences[index] || state.sentences[0];
+      const card = state.cards.find(c => c.sentenceId === target?.id) || state.candidates.find(c => c.sentenceId === target?.id);
+      const lines = [state.sentences[index - 1], target, state.sentences[index + 1]].filter(Boolean);
+      main.innerHTML = `<div class="source-view">
+        <div class="panel-header"><div class="panel-title">Source context</div><div class="panel-meta">${target ? `sentence ${index + 1}` : 'empty'}</div></div>
+        ${target ? lines.map(s => `<div class="context-line ${s.id === target.id ? 'target' : ''}">${highlight(s.text, card?.word || '')}</div>`).join('') : `<div class="empty">No source text.</div>`}
+      </div>`;
+    }
+
+    function bindStudio() {
+      const docInput = document.getElementById('docInput');
+      docInput.addEventListener('input', e => { state.text = e.target.value; save(); });
+      document.getElementById('fileInput').addEventListener('change', async e => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        state.text = await file.text();
+        state.candidates = [];
+        state.focusedSentenceId = null;
+        save(); render();
+      });
+      bindCommon();
+    }
+
+    function bindCommon() {
+      document.querySelectorAll('[data-make]').forEach(btn => btn.onclick = () => makeCard(btn.dataset.make));
+      document.querySelectorAll('[data-focus]').forEach(btn => btn.onclick = () => focusSource(btn.dataset.focus, 'studio'));
+      document.querySelectorAll('[data-source]').forEach(btn => btn.onclick = () => focusSource(btn.dataset.source, 'source'));
+      document.querySelectorAll('[data-delete]').forEach(btn => btn.onclick = () => removeCard(btn.dataset.delete));
+      document.querySelectorAll('.sentence').forEach(el => el.onclick = () => { state.focusedSentenceId = el.dataset.sentence; save(); render(); });
+    }
+
+    function bindReview() {
+      document.getElementById('showAnswerBtn').onclick = () => {
+        if (state.answerVisible) state.reviewIndex = (state.reviewIndex + 1) % Math.max(1, state.cards.length);
+        state.answerVisible = !state.answerVisible;
+        save(); render();
+      };
+      document.getElementById('unknownBtn').onclick = () => { state.answerVisible = true; render(); };
+      bindCommon();
+    }
+
+    function render() {
+      updateCounts();
+      if (state.view === 'studio') renderStudio();
+      if (state.view === 'cards') renderCardsPage();
+      if (state.view === 'review') renderReview();
+      if (state.view === 'source') renderSource();
+    }
+
+    document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
+    document.getElementById('extractBtn').addEventListener('click', extractCandidates);
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      localStorage.removeItem('kd_text'); localStorage.removeItem('kd_candidates'); localStorage.removeItem('kd_cards'); localStorage.removeItem('kd_focus'); localStorage.removeItem('kd_review_index');
+      state.text = sampleText; state.candidates = []; state.cards = []; state.focusedSentenceId = null; state.reviewIndex = 0; state.answerVisible = false; state.view = 'studio';
+      render();
+    });
+
+    if (!state.candidates.length && !state.cards.length) extractCandidates(); else render();
+  </script>
+</body>
+</html>
