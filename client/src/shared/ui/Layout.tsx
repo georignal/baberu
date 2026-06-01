@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 
 const navItems = [
   { to: '/', label: 'Home', exact: true },
@@ -14,6 +15,7 @@ const mobileNav = [
 
 export default function Layout() {
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const isActive = (to: string, exact?: boolean) => {
     if (exact) return location.pathname === to;
@@ -53,7 +55,10 @@ export default function Layout() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 justify-end min-w-[180px] max-md:min-w-0" />
+        <div className="flex items-center gap-2 justify-end min-w-[180px] max-md:min-w-0">
+          <span className="text-xs text-muted mr-2 hidden md:inline">{user?.username}</span>
+          <button className="btn-ghost text-xs" onClick={logout}>Logout</button>
+        </div>
       </header>
 
       <main className="p-4 max-md:p-3 max-md:pb-20 overflow-hidden">

@@ -26,26 +26,17 @@ router.get('/today', (_req: Request, res: Response) => {
   res.json({ cards: enriched, totalToday: allCards.length, reviewedToday: todayReviews.length });
 });
 
-// Log a review
+// Log a review and schedule next review
 router.post('/:cardId', (req: Request, res: Response) => {
   const { result } = req.body;
   const card = db.getCard(req.params.cardId);
-  if (!card) {
-    res.status(404).json({ error: 'Card not found' });
-    return;
-  }
+  if (!card) { res.status(404).json({ error: 'Card not found' }); return; }
 
-  const log = db.createReviewLog(req.params.cardId, result || 'seen');
+  db.createReviewLog(req.params.cardId, result || 'seen');
+  db.upsertReviewState(req.params.cardId, result || 'seen');
+  db.updateCard(req.params.cardId, { status: result === 'again' ? 'learning' : result === 'known' ? 'known' : 'mastered' });
 
-  // Update card status based on result
-  const statusMap: Record<string, string> = {
-    again: 'learning',
-    known: 'known',
-    mastered: 'mastered',
-  };
-  db.updateCard(req.params.cardId, { status: statusMap[result] || card.status });
-
-  res.json(log);
+  res.json({ message: 'ok' });
 });
 
 // Get daily stats for calendar
@@ -98,6 +89,22 @@ router.get('/stats', (_req: Request, res: Response) => {
     reviewedToday: todayReviews.length,
     byStatus: statusCounts,
   });
+});
+
+// Get cards due for review (SRS)
+router.get('/due', (_req: Request, res: Response) => {
+  const dueCards = db.getDueCards();
+  const enriched = dueCards.map((card) => {
+    const doc = db.getDocument(card.documentId);
+    const state = db.getReviewState(card.id);
+    return {
+      ...card,
+      documentTitle: doc?.title || 'Unknown',
+      reviewStage: state?.stage || 0,
+      dueAt: state?.dueAt || null,
+    };
+  });
+  res.json({ cards: enriched, total: enriched.length });
 });
 
 export default router;

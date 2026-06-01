@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { toHiragana, toRomaji, getVerbConjugations, getAdjectiveConjugations } from '@/shared/utils/japanese';
 import SpeakButton from '@/shared/ui/SpeakButton';
@@ -25,14 +25,25 @@ function highlightWord(text: string, word: string) {
 export default function CardsPage() {
   const { cards, loading, fetchCards, deleteCard, logReview } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Review state
   const [tab, setTab] = useState<Tab>('list');
   const [reviewIndex, setReviewIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [forgotten, setForgotten] = useState<Set<string>>(new Set());
-  const [remembered, setRemembered] = useState<Set<string>>(new Set());
+  const [forgotten, setForgotten] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('baberu_forgotten') || '[]')); } catch { return new Set(); }
+  });
+  const [remembered, setRemembered] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('baberu_remembered') || '[]')); } catch { return new Set(); }
+  });
   const [flyDir, setFlyDir] = useState<'left' | 'right' | null>(null);
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'forgotten'>('all');
 
-  // Navigate to a specific card (removes from sets so it shows again)
+  useEffect(() => { localStorage.setItem('baberu_forgotten', JSON.stringify(Array.from(forgotten))); }, [forgotten]);
+  useEffect(() => { localStorage.setItem('baberu_remembered', JSON.stringify(Array.from(remembered))); }, [remembered]);
+  useEffect(() => { if (!flyDir) return; const t = setTimeout(() => setFlyDir(null), 400); return () => clearTimeout(t); }, [flyDir]);
+
   const jumpToCard = (cardId: string) => {
     const idx = cards.findIndex(x => x.id === cardId);
     if (idx < 0) return;
@@ -42,16 +53,22 @@ export default function CardsPage() {
     setFlipped(false);
   };
 
-  // Clear animation after it ends
-  useEffect(() => {
-    if (!flyDir) return;
-    const t = setTimeout(() => setFlyDir(null), 400);
-    return () => clearTimeout(t);
-  }, [flyDir]);
-
   useEffect(() => {
     fetchCards();
   }, [fetchCards]);
+
+  // Handle navigation state: jump to specific card in review mode
+  useEffect(() => {
+    const state = location.state as { review?: boolean; cardId?: string } | null;
+    if (state?.review) {
+      setTab('review');
+      if (state.cardId) {
+        const idx = cards.findIndex(c => c.id === state.cardId);
+        if (idx >= 0) setReviewIndex(idx);
+      }
+      window.history.replaceState({}, '');
+    }
+  }, [cards, location.state]);
 
   // Stats
   const newCards = cards.filter((c) => c.status === 'new');
@@ -59,8 +76,9 @@ export default function CardsPage() {
   const knownCards = cards.filter((c) => c.status === 'known');
 
   // Review state
-  const reviewCard: Card | undefined = cards[reviewIndex % Math.max(1, cards.length)];
-  const allReviewed = forgotten.size + remembered.size >= cards.length && cards.length > 0;
+  const reviewCards = reviewFilter === 'forgotten' ? cards.filter(c => forgotten.has(c.id)) : cards;
+  const reviewCard: Card | undefined = reviewCards[reviewIndex % Math.max(1, reviewCards.length)];
+  const allReviewed = reviewFilter === 'all' && forgotten.size + remembered.size >= cards.length && cards.length > 0;
 
   const handleFlip = () => setFlipped((prev) => !prev);
 
@@ -78,7 +96,7 @@ export default function CardsPage() {
     }
     setFlipped(false);
     setTimeout(() => {
-      setReviewIndex((prev) => (prev + 1) % Math.max(1, cards.length));
+      setReviewIndex((prev) => (prev + 1) % Math.max(1, reviewCards.length));
     }, 350);
   };
 
@@ -107,7 +125,7 @@ export default function CardsPage() {
                 ? 'bg-panel text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,.05)]'
                 : 'text-muted hover:text-[#171717]'
             }`}
-            onClick={() => setTab('list')}
+            onClick={() => { setTab('list'); setReviewFilter('all'); }}
           >
             List
           </button>
@@ -117,7 +135,7 @@ export default function CardsPage() {
                 ? 'bg-panel text-[#171717] shadow-[0_1px_2px_rgba(0,0,0,.05)]'
                 : 'text-muted hover:text-[#171717]'
             }`}
-            onClick={() => setTab('review')}
+            onClick={() => { setTab('review'); setReviewFilter('all'); }}
           >
             Review
           </button>
@@ -205,6 +223,13 @@ export default function CardsPage() {
                 </button>
               </div>
             </div>
+          ) : reviewCards.length === 0 ? (
+            <div className="panel">
+              <div className="panel-body py-16 text-center">
+                <p className="text-subtle text-sm mb-4">No cards to review.</p>
+                <button className="btn-soft text-xs" onClick={() => { setReviewFilter('all'); setReviewIndex(0); }}>Show all cards</button>
+              </div>
+            </div>
           ) : (
             <div>
               <div className="text-center mb-3 flex items-center justify-center gap-3">
@@ -216,7 +241,7 @@ export default function CardsPage() {
                 {(forgotten.size > 0 || remembered.size > 0) && (
                   <button
                     className="text-[10px] text-subtle hover:text-muted underline"
-                    onClick={() => { setForgotten(new Set()); setRemembered(new Set()); }}
+                    onClick={() => { setForgotten(new Set()); setRemembered(new Set()); setReviewFilter('all'); }}
                   >
                     reset
                   </button>
@@ -247,9 +272,9 @@ export default function CardsPage() {
                       </div>
                       <button
                         className="btn-primary text-sm mt-2"
-                        onClick={() => setReviewIndex(0)}
+                        onClick={() => { setReviewFilter('forgotten'); setReviewIndex(0); }}
                       >
-                        Review Again
+                        Review Forgotten
                       </button>
                     </div>
                   </div>
@@ -288,7 +313,7 @@ export default function CardsPage() {
                   <div className="relative flex items-center justify-center">
                     <button
                       className="absolute left-0 z-10 -ml-10 w-8 h-8 rounded-full border border-border bg-panel text-muted hover:text-[#171717] hover:border-border-strong flex items-center justify-center transition-colors"
-                      onClick={(e) => { e.stopPropagation(); setFlipped(false); setReviewIndex((prev) => (prev - 1 + cards.length) % cards.length); }}
+                      onClick={(e) => { e.stopPropagation(); setFlipped(false); setReviewIndex((prev) => (prev - 1 + reviewCards.length) % reviewCards.length); }}
                     >←</button>
 
                     <div

@@ -1,8 +1,15 @@
 const BASE = '/api';
 
+function getHeaders() {
+  const token = localStorage.getItem('baberu_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     ...options,
   });
   if (!res.ok) {
@@ -83,4 +90,5 @@ export const api = {
     }),
   getReviewStats: () => request<import('./types').ReviewStats>('/review/stats'),
   getDailyStats: () => request<{ year: number; month: number; created: Record<string,number>; reviewed: Record<string,number> }>('/review/daily'),
+  getDueCards: () => request<{ cards: import('./types').Card[]; total: number }>('/review/due'),
 };

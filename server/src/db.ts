@@ -5,6 +5,7 @@ const DATA_DIR = path.resolve('data');
 const DATA_FILE = path.join(DATA_DIR, 'store.json');
 
 interface StoreData {
+  users: UserRecord[];
   documents: DocumentRecord[];
   segments: SegmentRecord[];
   sentences: SentenceRecord[];
@@ -12,9 +13,11 @@ interface StoreData {
   occurrences: OccurrenceRecord[];
   cards: CardRecord[];
   reviewLogs: ReviewLogRecord[];
+  reviewStates: ReviewStateRecord[];
 }
 
 const empty: StoreData = {
+  users: [],
   documents: [],
   segments: [],
   sentences: [],
@@ -22,6 +25,7 @@ const empty: StoreData = {
   occurrences: [],
   cards: [],
   reviewLogs: [],
+  reviewStates: [],
 };
 
 let store: StoreData;
@@ -58,6 +62,16 @@ function save(): void {
 
 load();
 
+let currentUserId = 'default';
+
+export function setCurrentUser(id: string) {
+  currentUserId = id;
+}
+
+export function getCurrentUser() {
+  return currentUserId;
+}
+
 export function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
@@ -71,10 +85,21 @@ function now(): string {
 }
 
 export const db = {
+  // Users
+  upsertUser(username: string): UserRecord {
+    const existing = store.users.find(u => u.username === username);
+    if (existing) return existing;
+    const user: UserRecord = { id: uuid(), username, createdAt: now() };
+    store.users.push(user);
+    save();
+    return user;
+  },
+
   // Documents
   createDocument(data: { title: string; fileType?: string; storagePath?: string; text: string }): DocumentRecord {
     const doc: DocumentRecord = {
       id: uuid(),
+      userId: currentUserId,
       title: data.title,
       fileType: data.fileType || 'text',
       storagePath: data.storagePath || null,
@@ -87,7 +112,7 @@ export const db = {
     return doc;
   },
   listDocuments(): DocumentRecord[] {
-    return store.documents.map((d) => ({
+    return store.documents.filter(d => d.userId === currentUserId).map((d) => ({
       ...d,
       segmentCount: store.segments.filter((s) => s.documentId === d.id).length,
       sentenceCount: store.sentences.filter((s) => s.documentId === d.id).length,
@@ -96,7 +121,7 @@ export const db = {
     })) as DocumentRecord[];
   },
   getDocument(id: string): DocumentRecord | undefined {
-    return store.documents.find((d) => d.id === id);
+    return store.documents.find((d) => d.id === id && d.userId === currentUserId);
   },
   deleteDocument(id: string): boolean {
     const before = store.documents.length;
@@ -283,10 +308,64 @@ export const db = {
   getAllReviewLogs(): ReviewLogRecord[] {
     return store.reviewLogs;
   },
+
+  // Spaced Repetition
+  getReviewState(cardId: string): ReviewStateRecord | undefined {
+    if (!store.reviewStates) store.reviewStates = [];
+    return store.reviewStates.find((r) => r.cardId === cardId);
+  },
+  upsertReviewState(cardId: string, result: string): ReviewStateRecord {
+    if (!store.reviewStates) store.reviewStates = [];
+    const intervals = [1, 2, 4, 7, 15, 30]; // Ebbinghaus intervals in days
+    let existing = store.reviewStates.find((r) => r.cardId === cardId);
+    const now = new Date();
+    if (existing) {
+      const stage = result === 'again' ? 0 : Math.min((existing.stage || 0) + 1, intervals.length - 1);
+      const days = intervals[stage];
+      const due = new Date(now);
+      due.setDate(due.getDate() + days);
+      existing.stage = stage;
+      existing.intervalDays = days;
+      existing.dueAt = due.toISOString();
+      existing.lastReviewedAt = now.toISOString();
+      existing.updatedAt = now.toISOString();
+    } else {
+      const days = result === 'again' ? 1 : intervals[0];
+      const due = new Date(now);
+      due.setDate(due.getDate() + days);
+      existing = {
+        id: uuid(),
+        cardId,
+        stage: result === 'again' ? 0 : 1,
+        intervalDays: days,
+        dueAt: due.toISOString(),
+        lastReviewedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      store.reviewStates.push(existing);
+    }
+    save();
+    return existing;
+  },
+  getDueCards(): CardRecord[] {
+    if (!store.reviewStates) store.reviewStates = [];
+    const now = new Date().toISOString();
+    const dueCardIds = store.reviewStates
+      .filter((r) => r.dueAt && r.dueAt <= now)
+      .map((r) => r.cardId);
+    // Also include new cards (never reviewed)
+    const reviewedIds = store.reviewStates.map((r) => r.cardId);
+    const newCardIds = store.cards.filter((c) => !reviewedIds.includes(c.id)).map((c) => c.id);
+    return store.cards.filter((c) => dueCardIds.includes(c.id) || newCardIds.includes(c.id));
+  },
+  getDueCount(): number {
+    return this.getDueCards().length;
+  },
 };
 
 export interface DocumentRecord {
   id: string;
+  userId: string;
   title: string;
   fileType: string;
   storagePath: string | null;
@@ -298,6 +377,14 @@ export interface DocumentRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface UserRecord {
+  id: string;
+  username: string;
+  createdAt: string;
+}
+
+// ... (other interfaces remain unchanged)
 
 export interface SegmentRecord {
   id: string;
@@ -366,4 +453,14 @@ export interface ReviewLogRecord {
   cardId: string;
   result: string;
   reviewedAt: string;
+}
+
+export interface ReviewStateRecord {
+  id: string;
+  cardId: string;
+  stage: number;
+  intervalDays: number;
+  dueAt: string;
+  lastReviewedAt: string;
+  updatedAt: string;
 }
