@@ -11,10 +11,12 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 app.use(express.json({ limit: '10mb' }));
 
 const clientDist = path.resolve(__dirname, '../../client/dist');
-app.use(express.static(clientDist));
-
-// Lazy-load heavy modules after port binding
-setTimeout(async () => {
+const hasClient = fs.existsSync(clientDist);
+if (hasClient) {
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+}
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', client: hasClient }));
   try {
     const { setCurrentUser } = await import('./db.js');
     const authRouter = (await import('./routes/auth.js')).default;
