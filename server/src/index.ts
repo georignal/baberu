@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'node:fs';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,12 +57,16 @@ app.use('/api/review', reviewRouter);
 
 // Production: serve built client files
 const clientDist = path.resolve(__dirname, '../../client/dist');
-app.use(express.static(clientDist));
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(clientDist, 'index.html'));
-});
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+} else {
+  app.get('/', (_req, res) => res.json({ status: 'ok', message: 'API server running' }));
+}
 
 // Start server first, then load dictionary in background
-const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}, client dist: ${clientDist}`));
 initDictionary().then(() => console.log('Dictionary ready'));
 
