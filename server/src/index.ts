@@ -59,16 +59,12 @@ app.use('/api/review', reviewRouter);
 
 // Production: serve built client files
 const clientDist = path.resolve(__dirname, '../../client/dist');
+console.log('Client dist path:', clientDist, 'exists:', fs.existsSync(clientDist));
 if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
-} else {
-  app.get('/', (_req, res) => res.json({ status: 'ok', message: 'API server running' }));
+  app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
 }
 
-// Start server first, then load dictionary in background
-app.listen(PORT, () => console.log(`Server running on port ${PORT}, client dist: ${clientDist}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}, client dist: ${clientDist}`));
 initDictionary().then(() => console.log('Dictionary ready')).catch((e: any) => console.error('Dictionary load failed:', e.message));
 
