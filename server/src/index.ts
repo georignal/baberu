@@ -56,4 +56,19 @@ async function load() {
   }
 }
 
-app.listen(PORT, () => { console.log('Listening on', PORT); load(); });
+let moduleReady = false;
+const modulePromise = load().then(() => { moduleReady = true; }).catch((e) => {
+  console.error('LOAD ERROR:', e);
+  moduleReady = true;
+});
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => { console.log('Listening on', PORT); });
+} else {
+  app.use(async (_req, _res, next) => {
+    if (!moduleReady) await modulePromise;
+    next();
+  });
+}
+
+export default app;
