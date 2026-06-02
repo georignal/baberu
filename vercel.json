@@ -1,4 +1,4 @@
 {
-  "buildCommand": "npm install --prefix ../server && npm install && npm run build",
+  "buildCommand": "npm install --prefix ../server && npm install $(node -e \"console.log(Object.keys(require('../server/package.json').dependencies).join(' '))\") && npm install && npm run build",
   "outputDirectory": "dist"
 }
