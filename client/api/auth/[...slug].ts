@@ -14,4 +14,5 @@ app.use((req: any, _res: any, next: any) => {
   next();
 });
 app.use('/api/auth', authRouter);
+
 export default app;
