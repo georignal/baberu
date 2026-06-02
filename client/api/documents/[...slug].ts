@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import { setCurrentUser, db } from '../../../server/src/db.js';
-import { parseDocument } from '../../../server/src/services/documentParser.js';
 
 const app = express();
 app.use(cors());
@@ -18,17 +17,14 @@ app.use((req: any, _res: any, next: any) => {
   next();
 });
 
-// Documents CRUD (skip vocabulary extraction which needs kuromoji)
 app.get('/api/documents', async (_req: any, res: any) => {
-  const docs = await db.listDocuments();
-  res.json(docs);
+  res.json(await db.listDocuments());
 });
 
 app.post('/api/documents', async (req: any, res: any) => {
   const { title, text, fileType } = req.body;
   if (!text || typeof text !== 'string') { res.status(400).json({ error: 'Text content is required' }); return; }
-  const doc = await db.createDocument({ title: title || 'Untitled', fileType: fileType || 'text', text });
-  res.status(201).json(doc);
+  res.status(201).json(await db.createDocument({ title: title || 'Untitled', fileType: fileType || 'text', text }));
 });
 
 app.get('/api/documents/:id', async (req: any, res: any) => {
@@ -42,34 +38,35 @@ app.delete('/api/documents/:id', async (req: any, res: any) => {
   res.json({ message: 'Deleted' });
 });
 
-app.get('/api/documents/:id/segments', async (req: any, res: any) => {
-  const segments = await db.getSegments(req.params.id);
-  res.json(segments);
-});
-
-app.get('/api/documents/:id/sentences', async (req: any, res: any) => {
-  const sentences = await db.getSentences(req.params.id);
-  res.json(sentences);
-});
-
 app.post('/api/documents/:id/parse', async (req: any, res: any) => {
   try {
+    const { parseDocument } = await import('../../../server/src/services/documentParser.js');
     const doc = await db.getDocument(req.params.id);
     if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
-    const parsed = parseDocument(doc.text);
-    const segments = await db.createSegments(doc.id, parsed.segments.map(seg => ({
+    const parsed = await parseDocument(doc.text);
+    const segments = await db.createSegments(doc.id, parsed.segments.map((seg: any) => ({
       paragraphIndex: seg.paragraphIndex, text: seg.text, startOffset: seg.startOffset, endOffset: seg.endOffset,
     })));
     let totalSentences = 0;
     for (const seg of parsed.segments) {
-      const segRecord = segments.find((s: any) => s.paragraph_index === seg.paragraphIndex)!;
-      await db.createSentences(doc.id, seg.sentences.map(sent => ({
-        segmentId: segRecord.id, sentenceIndex: sent.sentenceIndex, text: sent.text, startOffset: sent.startOffset, endOffset: sent.endOffset,
-      })));
-      totalSentences += seg.sentences.length;
+      const segRecord = segments.find((s: any) => s.paragraph_index === seg.paragraphIndex);
+      if (segRecord) {
+        await db.createSentences(doc.id, seg.sentences.map((sent: any) => ({
+          segmentId: segRecord.id, sentenceIndex: sent.sentenceIndex, text: sent.text, startOffset: sent.startOffset, endOffset: sent.endOffset,
+        })));
+        totalSentences += seg.sentences.length;
+      }
     }
     res.json({ segments: segments.length, sentences: totalSentences });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/documents/:id/segments', async (req: any, res: any) => {
+  res.json(await db.getSegments(req.params.id));
+});
+
+app.get('/api/documents/:id/sentences', async (req: any, res: any) => {
+  res.json(await db.getSentences(req.params.id));
 });
 
 app.get('/api/documents/:id/vocabulary-candidates', async (req: any, res: any) => {

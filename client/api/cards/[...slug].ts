@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import { setCurrentUser, db } from '../../../server/src/db.js';
-import { BUILTIN_DICT } from '../../../server/src/services/builtin-dict.js';
 
 const app = express();
 app.use(cors());
@@ -18,23 +17,18 @@ app.use((req: any, _res: any, next: any) => {
   next();
 });
 
-const BUILTIN_MAP = new Map<string, string>();
-for (const [k, , m] of BUILTIN_DICT) { if (!BUILTIN_MAP.has(k)) BUILTIN_MAP.set(k, m); }
-
 app.get('/api/cards', async (_req: any, res: any) => {
-  const cards = await db.listCards();
-  res.json(cards);
+  res.json(await db.listCards());
 });
 
 app.post('/api/cards', async (req: any, res: any) => {
   const { frontText, reading, meaning, partOfSpeech, exampleSentences, documentId, sentenceId, vocabularyId } = req.body;
   if (!frontText) { res.status(400).json({ error: 'frontText is required' }); return; }
-  const card = await db.createCard({
+  res.status(201).json(await db.createCard({
     vocabularyId: vocabularyId || '', documentId: documentId || '', sentenceId: sentenceId || '',
     frontText, reading: reading || '', meaning: meaning || '', partOfSpeech: partOfSpeech || '',
     exampleSentences: exampleSentences || [], dictData: null,
-  });
-  res.status(201).json(card);
+  }));
 });
 
 app.get('/api/cards/:id', async (req: any, res: any) => {
@@ -45,8 +39,7 @@ app.get('/api/cards/:id', async (req: any, res: any) => {
 
 app.patch('/api/cards/:id', async (req: any, res: any) => {
   await db.updateCard(req.params.id, req.body);
-  const card = await db.getCard(req.params.id);
-  res.json(card);
+  res.json(await db.getCard(req.params.id));
 });
 
 app.delete('/api/cards/:id', async (req: any, res: any) => {
