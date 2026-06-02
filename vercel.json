@@ -1,3 +1,8 @@
 {
-  "buildCommand": "npm install --prefix server && npm install --prefix client && npm run build --prefix client && cp -r client/dist/* ."
+  "buildCommand": "npm install --prefix server && npm install --prefix client && npm run build --prefix client && cp -r client/dist/* .",
+  "functions": {
+    "api/*.ts": {
+      "runtime": "@vercel/node@4"
+    }
+  }
 }
