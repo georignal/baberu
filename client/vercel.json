@@ -1,9 +1,8 @@
 {
   "buildCommand": "npm install --prefix ../server && npm install @supabase/supabase-js @vitalets/google-translate-api kuromoji node-html-parser youtube-transcript tsx express cors dotenv && npm install && npm run build",
   "outputDirectory": "dist",
-  "routes": [
-    { "handle": "filesystem" },
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/:path*", "destination": "/index.html" }
   ]
 }
