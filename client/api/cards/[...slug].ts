@@ -13,12 +13,6 @@ app.use((req: any, _res: any, next: any) => {
   next();
 });
 
-app.get('/api/cards', async (_req: any, res: any) => res.json(await db.listCards()));
-app.post('/api/cards', async (req: any, res: any) => {
-  const { frontText, reading, meaning, partOfSpeech, exampleSentences, documentId, sentenceId, vocabularyId } = req.body;
-  if (!frontText) { res.status(400).json({ error: 'frontText is required' }); return; }
-  res.status(201).json(await db.createCard({ vocabularyId: vocabularyId || '', documentId: documentId || '', sentenceId: sentenceId || '', frontText, reading: reading || '', meaning: meaning || '', partOfSpeech: partOfSpeech || '', exampleSentences: exampleSentences || [], dictData: null }));
-});
 app.get('/api/cards/:id', async (req: any, res: any) => {
   const card = await db.getCard(req.params.id);
   if (!card) { res.status(404).json({ error: 'Card not found' }); return; }
@@ -33,11 +27,6 @@ app.get('/api/cards/:id/source', async (req: any, res: any) => {
   const targetIndex = sentences.findIndex((s: any) => s.id === card.sentenceId);
   const target = sentences[targetIndex]; const prev = targetIndex > 0 ? sentences[targetIndex - 1] : null; const next = targetIndex < sentences.length - 1 ? sentences[targetIndex + 1] : null;
   res.json({ documentTitle: doc?.title || 'Unknown', documentId: card.documentId, sentence: target?.text || '', previousSentence: prev?.text || null, nextSentence: next?.text || null, highlight: { word: card.frontText, startOffset: target?.text?.indexOf(card.frontText) ?? -1, endOffset: (target?.text?.indexOf(card.frontText) ?? -1) + card.frontText.length } });
-});
-app.get('/api/review/today', async (_req: any, res: any) => {
-  const allCards = await db.listCards(); const todayReviews = await db.getTodayReviews();
-  const reviewedIds = new Set(todayReviews.map((r: any) => r.cardId));
-  res.json({ cards: allCards.filter((c: any) => !reviewedIds.has(c.id)), totalToday: allCards.length, reviewedToday: todayReviews.length });
 });
 
 export default app;

@@ -13,12 +13,6 @@ app.use((req: any, _res: any, next: any) => {
   next();
 });
 
-app.get('/api/documents', async (_req: any, res: any) => res.json(await db.listDocuments()));
-app.post('/api/documents', async (req: any, res: any) => {
-  const { title, text, fileType } = req.body;
-  if (!text || typeof text !== 'string') { res.status(400).json({ error: 'Text content is required' }); return; }
-  res.status(201).json(await db.createDocument({ title: title || 'Untitled', fileType: fileType || 'text', text }));
-});
 app.get('/api/documents/:id', async (req: any, res: any) => {
   const doc = await db.getDocument(req.params.id);
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
